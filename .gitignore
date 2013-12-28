@@ -161,3 +161,7 @@ pip-log.txt
 
 # Mac crap
 .DS_Store
+
+# my config
+kancolle_manipulater.py
+tmp.py
