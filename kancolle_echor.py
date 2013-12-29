@@ -6,19 +6,19 @@ from threading import Timer as Timer
 ########################
 # user define config
 mission = {2:17,3:3,4:5}
-api_token = 'f01d18e36e246f00fb437f899ab59a573d367cf7'
+api_token = ''
 api_verno = 1
 api_starttime = 1388142501982
 host = '125.6.189.135'
-baseurl = 'http://'+host
-log_file = r'.\log'
-api_token_file = r'.\api_token'
+log_file = r'log'
+api_token_file = r'api_token'
 sleep_time_file = r'sleep_time'
 connection_retry_time = 10
 ########################
 
 ########################
 # config
+baseurl = 'http://'+host
 headers = {
 	'Accept': '*/*',
 	'Accept-Language': 'zh-CN',
@@ -34,7 +34,6 @@ headers = {
 }
 ########################
 
-# time_to_sleep = 0
 tasks = [] # [[deck_id,back_time,returned]...] sorted
 ship_id = {} # {deck_id:[ship_id...]} sorted
 
@@ -49,7 +48,7 @@ def log_to_file(tag,role,message):
 
 def write_sleep_time(time_to_sleep):
 	f = open(sleep_time_file,'w')
-	f.write(str(int(time_to_sleep))+'s')
+	f.write(str(int(time_to_sleep)))
 	f.close()
 
 ############################
@@ -244,22 +243,10 @@ def process():
 	# global time_to_sleep
 	time_to_sleep = 12+tasks[0][1]-time.time()
 	write_sleep_time(time_to_sleep)
-	# schedule()
-
-# def schedule():
-# 	global time_to_sleep
-# 	t = Timer(time_to_sleep,process)
-# 	t.start()
 
 def ending():
 	log('debug','ending','all process ended')
 	return True
-
-def restore_env():
-	# global tasks
-	# tasks = [[2,1388165773,0],[4,1388166095,0],[3,1388166684,0]]
-	global ship_id
-	ship_id = {2: [85, 96, 122, 588], 3: [84, 95, 112], 4: [243, 308, 333, 568]}
 
 if __name__ == '__main__':
 	# pass
@@ -267,19 +254,3 @@ if __name__ == '__main__':
 		process()
 	else:
 		ending()
-	
-	# fetch_fleet_ship_id(mission.keys())
-
-	# fetch_fleet_ship_id([2,3,4])
-	# restore_env()
-	# charge_fleet(2)
-	# # charge_fleet(3)
-	# charge_fleet(4)
-	
-	# start_mission(2,1)
-	# start_mission(3,3)
-	
-	# result_pre()
-	# fetch_mission_result(2)
-	# time.sleep(5)
-	# fetch_mission_result(3)

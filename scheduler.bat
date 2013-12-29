@@ -2,5 +2,5 @@
 :loop
 python kancolle_echor.py
 set /p SLEEP_TIME= < sleep_time
-sleep %SLEEP_TIME%
+timeout /NOBREAK %SLEEP_TIME%
 goto loop
