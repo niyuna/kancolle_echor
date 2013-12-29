@@ -5,7 +5,7 @@ from threading import Timer as Timer
 
 ########################
 # user define config
-mission = {2:2,3:3,4:5}
+mission = {2:17,3:3,4:5}
 api_token = 'f01d18e36e246f00fb437f899ab59a573d367cf7'
 api_verno = 1
 api_starttime = 1388142501982
@@ -13,6 +13,7 @@ host = '125.6.189.135'
 baseurl = 'http://'+host
 log_file = r'.\log'
 api_token_file = r'.\api_token'
+sleep_time_file = r'sleep_time'
 connection_retry_time = 10
 ########################
 
@@ -33,7 +34,7 @@ headers = {
 }
 ########################
 
-time_to_sleep = 0
+# time_to_sleep = 0
 tasks = [] # [[deck_id,back_time,returned]...] sorted
 ship_id = {} # {deck_id:[ship_id...]} sorted
 
@@ -44,6 +45,11 @@ def log_to_file(tag,role,message):
 	f = open(log_file,'a')
 	output = '%s # %s # %s # %s'%(time.ctime(),tag.upper(),role.upper(),message)
 	f.write(output+'\n')
+	f.close()
+
+def write_sleep_time(time_to_sleep):
+	f = open(sleep_time_file,'w')
+	f.write(str(int(time_to_sleep))+'s')
 	f.close()
 
 ############################
@@ -68,7 +74,7 @@ def callAPIsub(api,data):
 	payload.update(data)
 	url = baseurl+api
 	try:
-		r = req.post(url,data=payload,headers=headers,timeout=3)
+		r = req.post(url,data=payload,headers=headers,timeout=15)
 		if r.status_code == 200:
 			try:
 				json_value = json.loads(r.text.split('=')[1])
@@ -235,14 +241,15 @@ def process():
 	log_to_file('info','processer',str(tasks))
 	for t in tasks:
 		log_to_file('info','processer','fleet %d return at %s %s'%(t[0],str(t[1]),time.ctime(t[1])))
-	global time_to_sleep
+	# global time_to_sleep
 	time_to_sleep = 12+tasks[0][1]-time.time()
-	schedule()
+	write_sleep_time(time_to_sleep)
+	# schedule()
 
-def schedule():
-	global time_to_sleep
-	t = Timer(time_to_sleep,process)
-	t.start()
+# def schedule():
+# 	global time_to_sleep
+# 	t = Timer(time_to_sleep,process)
+# 	t.start()
 
 def ending():
 	log('debug','ending','all process ended')
