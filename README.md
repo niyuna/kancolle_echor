@@ -1,7 +1,28 @@
 kancolle_echor
 =========================
 
-Simple script that automate kancolle march mission.
+Simple script that automate kancolle.
+
+### Changes in ver. Taihou
+1. New feature
+
+	1. Automate 3-2-a battle. To use this, you have to supply some configs. 
+
+		* ss_id: the ship ids of your submarine
+		* ss_loc: the place to hold your submarine
+
+		And create a file named counter to store 3-2-a battle count. Place your submarine at ss_loc
+		and the script will change ships if the ship has too low life or in bad condition. Only when all of your
+		ships in fleet 1 are in good condition will the script go to battle.
+
+	2. Automate ship repair. First it will repair submarines, then prefer ships that can be repaired in shorter time.
+
+2. Rewrite control logic for safety purpose. Now this script has almost the same api actions as the kcs flash client.
+
+3. Now api call will retry for 10 times, if it still fails, script will restart in 60s.
+
+4. The API_TOKEN file and log file are removed, change api_token in kancolle_echor.py.
+
 
 ### Requirement
 The python script need python 2.7 and python requests lib, you can simply install it using:
