@@ -6,8 +6,8 @@ from threading import Timer as Timer
 
 ########################
 # user define config
-mission = {2:5,3:2}
-api_token = '9e5d38e2717f200285eacee6acffef41e7ac3b3f'
+mission = {2:5,3:3,4:17}
+api_token = ''
 api_verno = 1
 host = '125.6.189.135'
 log_file = r'log'
@@ -322,7 +322,7 @@ def nyukyo(ship_id,ndock_id,highspeed):
 	jo = callAPI(api,data)
 	if jo is not None:
 		log('info','nyukyo','ok')
-		log('info','nyukyo','ship %d repairing at ndock %d'%(ship_id,ndock_id))
+		log('info','nyukyo','ship %d repairing at ndock %d with %d highspeed'%(ship_id,ndock_id,highspeed))
 		return True
 	return False
 
@@ -365,7 +365,7 @@ def mapinfo():
 		return True
 	return False
 
-def mapcell(mapinfo_no=2,maparea_id=3):
+def mapcell(mapinfo_no=3,maparea_id=3):
 	api = '/kcsapi/api_get_master/mapcell'
 	data = {'api_mapinfo_no':mapinfo_no,'api_maparea_id':maparea_id}
 	jo = callAPI(api,data)
@@ -374,7 +374,7 @@ def mapcell(mapinfo_no=2,maparea_id=3):
 		return True
 	return False
 
-def map_start(mapinfo_no=2,maparea_id=3,deck_id=1,formation_id=1):
+def map_start(mapinfo_no=3,maparea_id=3,deck_id=1,formation_id=1):
 	api = '/kcsapi/api_req_map/start'
 	data = {'api_formation_id':formation_id,'api_deck_id':deck_id,'api_mapinfo_no':mapinfo_no,'api_maparea_id':maparea_id}
 	jo = callAPI(api,data)
@@ -518,9 +518,9 @@ def check_battle_condition():
 		cond_wait = (33-min_cond)*60
 	else:
 		cond_wait = 0
-	for s in all_ships:
-		if s.id in main_fleet and s.id in repair_dock.values():
-			cond_wait = 600 
+	# for s in all_ships:
+	# 	if s.id in main_fleet and s.id in repair_dock.values():
+	# 		cond_wait = 600 
 
 	ss_wait = 600
 	# check ss state
@@ -548,11 +548,15 @@ def check_battle_condition():
 				ss_wait = 0
 				ok_flag = True
 	wait_time = max(ss_wait,cond_wait)
+	for s in all_ships:
+		if s.life*2<s.max_life and s.id in all_fleets[1] and s.id not in all_ss:
+			wait_time = 60
 	if wait_time is 0:
 		return True
 	else:
 		global sleep_time
 		sleep_time = min(sleep_time,wait_time)
+		log("info",'check_b_cond','wait_time is %d'%(wait_time))
 		return False
 
 def go_to_battle():
@@ -565,9 +569,11 @@ def go_to_battle():
 	mapcell()
 	map_start()
 	battle()
+	time.sleep(5)
 	if midnight_flag==1:
 		yasen()
 	# battle step
+	time.sleep(5)
 	battle_result()
 	ship2()
 	slotitem()
@@ -586,16 +592,19 @@ def auto_mission():
 		if on_mission[fleet_id] is not -1:
 			if time.time() > on_mission[fleet_id]+5:
 				fetch_mission_result(fleet_id)
+				time.sleep(1)
 	# go_to_home()
 	# charge fleets
 	for fleet_id in mission.keys():
 		if on_mission[fleet_id]==-1:
 			charge_fleet(fleet_id)
+			time.sleep(1)
 	# set out for mission
 	for mis in mission.items():
 		if on_mission[mis[0]]==-1:
 			go_to_mission_page(mis[1])
 			start_mission(mis[0],mis[1])
+			time.sleep(3)
 	go_to_home()
 	for fleet_id in mission.keys():
 		if on_mission[fleet_id] is not -1:
@@ -604,11 +613,13 @@ def auto_mission():
 def auto_battle():
 	while check_battle_condition():
 		go_to_battle()
+		time.sleep(3)
 		global battle_cnt
 		battle_cnt += 1
 
 def auto_repair():
 	repair_list = [ele for ele in all_ships if ele.life<ele.max_life and ele.id not in repair_dock.values()]
+	repair_list = [ele for ele in repair_list if (ele.id in all_fleets[1] and (ele.life*2<ele.max_life or ele.id in all_ss)) or ele.id not in all_fleets[1]]
 	repair_list.sort(key=lambda x:float(x.life)/x.max_life,reverse=True)
 	for s in repair_list:
 		# find an empty dock
@@ -620,19 +631,22 @@ def auto_repair():
 				else:
 					repair(s.id,i+1,0)
 				break
+		time.sleep(1)
 	return True
 
 def main():
 	go_to_home()
 	if enable_auto_mission:
 		auto_mission()
+	time.sleep(3)
 	if enable_auto_battle:
 		auto_battle()
+	time.sleep(3)
 	if enable_auto_repair:
 		auto_repair()
 	global sleep_time
 	if sleep_time<0:
-		log('info','main','error with sleep time')
+		log('info','main','error with sleep time %d'%(sleep_time))
 		sleep_time = 60
 	write_battle_cnt()
 	write_sleep_time()
