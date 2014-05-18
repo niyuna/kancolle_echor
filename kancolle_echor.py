@@ -3,13 +3,17 @@ import requests as req
 import json
 import sys
 from threading import Timer as Timer
+from random import random
+import math
+
 
 ########################
 # user define config
-mission = {2:2,3:5,4:38}
-api_token = 'd483d291c6bc4df6c4cde7499ee642daf8c54109'
+mission = {2:2, 3:5, 4:37} # {2:6, 3:5, 4:38}
+api_token = ''
 api_verno = 1
 host = '125.6.189.135'
+member_id = ''
 log_file = r'log'
 api_token_file = r'api_token'
 sleep_time_file = r'sleep_time'
@@ -18,30 +22,35 @@ connection_retry_time = 5
 enable_auto_mission = True
 enable_auto_battle = False
 enable_auto_repair = True
-go_to_tokyo = True
-enable_proxy = True
-ss_id = [695,93,365,704,385,1917]
+go_to_tokyo = False
+enable_proxy = False # when network sucks, use a local proxy to avoid catgod
+ss_id = [695, 93, 365, 704, 385, 1917]
 ss_loc = 1 # 0~5
-protection_id = [744,31,118,648,913]
+# these ships will be repaired when they are less than 50% max HP
+protection_id = [744, 31, 118, 648, 913]
 ########################
 
 ########################
 # config
-baseurl = 'http://'+host
+baseurl = 'http://' + host
 headers = {
 	'Accept': '*/*',
-	'Accept-Language': 'zh-CN',
-	'Referer': baseurl+'/kcs/port.swf?version=1.5.9', # WARNING!!! version is fixed
+	'Accept-Language': 'zh-CN,zh;q=0.8,en-US;q=0.6,en;q=0.4,ja;q=0.2,zh-TW;q=0.2',
+	'Referer': baseurl+'/kcs/Core.swf?version=2.0.9', # WARNING!!! version is fixed
 	'Content-Type': 'application/x-www-form-urlencoded',
-	'Accept-Encoding': 'gzip, deflate',
+	'Accept-Encoding': 'gzip,deflate,sdch',
 	'User-Agent': 'Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.2; WOW64; Trident/6.0),',
 	'Host': host,
+	'Origin': baseurl,
 	'Connection': 'Keep-Alive'
 }
+
+# local proxy setting
 proxy_dict = {
-	'http':'http://127.0.0.1:8087',
-	'https':'127.0.0.1:8087',
+	'http': 'http://127.0.0.1:8087',
+	'https': '127.0.0.1:8087',
 }
+########################
 
 class ship():
 	id = -1
@@ -55,15 +64,15 @@ all_ss = ss_id # [ss_ship_id...]
 all_fleets = {} # {deck_id:[ship_id...]} sorted # deck_id:1,2,3,4
 repair_dock = {} # {dock_id:ship_id} # 0 for empty # ndock_id:1,2,3,4
 on_mission = {} # {deck_id:state} # deck_id:1,2,3,4 # state: -1 for not, else the time it returns
-tasks = [] # [[deck_id,back_time,returned]...] sorted
 midnight_flag = 0 # midnight flag for every battle
-battle_cnt = 0
+battle_cnt = 0 # record the default battle count into count file 
 sleep_time = 1800
 ship_cnt = 0
 
-res = [0,0,0,0]
+res = [0, 0, 0, 0]
 construct_util = 0
 repair_util = 0
+
 
 def log(tag,role,message):
 	print '%s # %s # %s # %s'%(time.ctime(),tag.upper(),role.upper(),message)
@@ -144,7 +153,7 @@ def callAPI(api,data):
 			time.sleep(5)
 	log('info','callAPI','reach max limit, restart system in 60s')
 	global sleep_time
-	sleep_time = 900
+	sleep_time = 3600
 	write_sleep_time()
 	sys.exit(0)
 	return None
@@ -160,6 +169,8 @@ def parse_ship(jo):
 		tmp.life = s['api_nowhp']
 		tmp.id = s['api_id']
 		all_ships.append(tmp)
+	global ship_cnt
+	ship_cnt = len(all_ships)
 
 
 def parse_fleet(jo):
@@ -176,53 +187,32 @@ def parse_fleet(jo):
 			on_mission[i+1] = long(mis[2])/1000
 
 
-# checked
 def parse_ndock(jo):
 	global repair_dock
 	for j in jo:
 		repair_dock[j['api_id']] = j['api_ship_id']
 
 
+def parse_material(jo):
+	global resource
+	global repair_util
+	res[0] = jo[0]['api_value']
+	res[1] = jo[1]['api_value']
+	res[2] = jo[2]['api_value']
+	res[3] = jo[3]['api_value']
+	repair_util = jo[5]['api_value']
+
+
+# parse `port` api call
+def parse_port(jo):
+	parse_ship(jo['api_ship'])
+	parse_ndock(jo['api_ndock'])
+	parse_fleet(jo['api_deck_port'])
+	parse_material(jo['api_material'])
+
 #############################
 # kcs apis
 #############################
-
-def login_check():
-	api = '/kcsapi/api_auth_member/logincheck'
-	data = {}
-	jo = callAPI(api,data)
-	if jo is not None:
-		log('info','login_check','ok')
-		return True
-	return False
-
-
-def material():
-	api = '/kcsapi/api_get_member/material'
-	data = {}
-	jo = callAPI(api,data)
-	if jo is not None:
-		log('info','material','ok')
-		# parse material
-		global resource
-		global repair_util
-		res[0] = jo['api_data'][0]['api_value']
-		res[1] = jo['api_data'][1]['api_value']
-		res[2] = jo['api_data'][2]['api_value']
-		res[3] = jo['api_data'][3]['api_value']
-		repair_util = jo['api_data'][5]['api_value']
-		return True
-	return False
-
-
-def deck_port():
-	api = '/kcsapi/api_get_member/deck_port'
-	data = {}
-	jo = callAPI(api,data)
-	if jo is not None:
-		log('info','deck_port','ok')
-		return True
-	return False
 
 def ndock():
 	api = '/kcsapi/api_get_member/ndock'
@@ -237,7 +227,7 @@ def ndock():
 
 def ship2():
 	api = '/kcsapi/api_get_member/ship2'
-	data = {'api_sort_order':2,'api_sort_key':1}
+	data = {'spi_sort_order':2, 'api_sort_key':5}
 	jo = callAPI(api,data)
 	if jo is not None:
 		log('info','ship2','ok')
@@ -247,30 +237,6 @@ def ship2():
 	return False
 
 
-def ship3():
-	api = '/kcsapi/api_get_member/ship3'
-	data = {'api_sort_order':2,'api_sort_key':1}
-	jo = callAPI(api,data)
-	if jo is not None:
-		log('info','ship3','ok')
-		parse_ship(jo['api_data']['api_ship_data'])
-		parse_fleet(jo['api_data']['api_deck_data'])
-		ship_cnt = len(all_ships)
-		return True
-	return False
-
-
-def basic():
-	api = '/kcsapi/api_get_member/basic'
-	data = {}
-	jo = callAPI(api,data)
-	if jo is not None:
-		log('info','basic','ok')
-		return True
-	return False
-
-
-# checked
 def result(deck_id):
 	api = '/kcsapi/api_req_mission/result'
 	data = {'api_deck_id':deck_id}
@@ -283,19 +249,47 @@ def result(deck_id):
 		return False
 
 
-# checked: new
-# including material cnt here
+# api_port_helper
+def gI(s):
+	return int(s, 31)
+
+
+# api_port_helper
+def cN():
+	return str(int(math.floor(random() * 10)))
+
+
+# api_port_helper
+def tI():
+	return int(time.time() * 1000)
+
+
+# new method for api_port
+def generate_api_port():
+	# _local3 = ["16o", "1sc", "2j6", "371", "50e", "5dp", "6hi", "89a", "8dc", "9nf", "118"] # core_2_0_1
+	_local3 = ["315", "50e", "7ig", "209", "63e", "9c6", "6cj", "3ge", "928", "1h9", "118"]; # core_2_0_9
+	u = int(member_id)
+	ret = ''
+	ret += str(gI(_local3[10]) + (u % gI(_local3[10])))
+	ret += str((9999999999 - int(math.floor(tI() / gI(_local3[10]))) - u) * gI(_local3[(u % 10)]))
+	ret += cN() * 4
+	log('info', 'port', ret)
+	return ret
+
+
+# new method for api_port
 def port():
 	api = '/kcsapi/api_port/port'
-	data = {}
+	data = {'spi_sort_order':2, 'api_sort_key':5, 'api_port':generate_api_port()}
 	jo = callAPI(api, data)
 	if jo is not None:
+		log('info', 'port', 'parsing data')
+		parse_port(jo['api_data'])
 		log('info', 'port', 'ok')
 		return True
 	return False
 
 
-# checked
 def useitem():
 	api = '/kcsapi/api_get_member/useitem'
 	data = {}
@@ -304,6 +298,7 @@ def useitem():
 		log('info','useitem','ok')
 		return True
 	return False
+
 
 def change(ship_id,ship_idx):
 	api = '/kcsapi/api_req_hensei/change'
@@ -316,7 +311,6 @@ def change(ship_id,ship_idx):
 	return False
 
 
-# checked
 def deck():
 	api = '/kcsapi/api_get_member/deck'
 	data = {}
@@ -328,7 +322,6 @@ def deck():
 	return False
 
 
-# checked: modified
 def charge(deck_id):
 	api = '/kcsapi/api_req_hokyu/charge'
 	api_id_items = ','.join([str(ele) for ele in all_fleets[deck_id]])
@@ -342,7 +335,6 @@ def charge(deck_id):
 		return False
 
 
-# checked
 def nyukyo(ship_id,ndock_id,highspeed):
 	api = '/kcsapi/api_req_nyukyo/start'
 	data = {'api_ship_id':ship_id,'api_ndock_id':ndock_id,'api_highspeed':highspeed}
@@ -354,7 +346,6 @@ def nyukyo(ship_id,ndock_id,highspeed):
 	return False
 
 
-# checked: modified
 def mission_page():
 	api = '/kcsapi/api_get_member/mission'
 	data = {}
@@ -365,7 +356,6 @@ def mission_page():
 	return False
 
 
-# checked
 def api_start_mission(deck_id,mission_id):
 	api = '/kcsapi/api_req_mission/start'
 	data = {'api_deck_id':deck_id,'api_mission_id':mission_id}
@@ -375,16 +365,6 @@ def api_start_mission(deck_id,mission_id):
 		backtime = long(jo['api_data']['api_complatetime'])/1000
 		log('info','start_mission','fleet %d start mission %d'%(deck_id,mission_id))
 		log('info','start_mission','and will return at %s'%(time.ctime(backtime)))
-		return True
-	return False
-
-
-def record():
-	api = '/kcsapi/api_get_member/record'
-	data = {}
-	jo = callAPI(api,data)
-	if jo is not None:
-		log('info','record','ok')
 		return True
 	return False
 
@@ -399,7 +379,6 @@ def mapinfo():
 	return False
 
 
-# checked
 def mapcell(mapinfo_no=3,maparea_id=3):
 	api = '/kcsapi/api_get_member/mapcell'
 	data = {'api_mapinfo_no':mapinfo_no,'api_maparea_id':maparea_id}
@@ -410,7 +389,16 @@ def mapcell(mapinfo_no=3,maparea_id=3):
 	return False
 
 
-# checked
+def sortie_conditions():
+	api = '/kcsapi/api_get_member/sortie_conditions'
+	data = {}
+	jo = callAPI(api, data)
+	if jo is not None:
+		log('info', 'sortie_conditions', 'ok')
+		return True
+	return False
+
+
 def map_start(mapinfo_no=3,maparea_id=3,deck_id=1,formation_id=1):
 	api = '/kcsapi/api_req_map/start'
 	data = {'api_formation_id':formation_id,'api_deck_id':deck_id,'api_mapinfo_no':mapinfo_no,'api_maparea_id':maparea_id}
@@ -421,10 +409,9 @@ def map_start(mapinfo_no=3,maparea_id=3,deck_id=1,formation_id=1):
 	return False
 
 
-# checked
 def map_next():
 	api = '/kcsapi/api_req_map/next'
-	data = {}
+	data = {'api_recovery_type':0}
 	jo = callAPI(api,data)
 	if jo is not None:
 		log('info','map_next','ok')
@@ -436,7 +423,7 @@ def map_next():
 
 def battle(formation=1):
 	api = '/kcsapi/api_req_sortie/battle'
-	data = {'api_formation':formation}
+	data = {'api_formation':formation, 'api_recovery_type':0}
 	jo = callAPI(api,data)
 	if jo is not None:
 		log('info','battle','ok')
@@ -453,16 +440,28 @@ def battle_result():
 	jo = callAPI(api,data)
 	if jo is not None:
 		log('info','battle_result','enemy %s rank %s'%(jo['api_data']['api_enemy_info']['api_deck_name'],jo['api_data']['api_win_rank']))
+		if 'api_get_ship' in jo['api_data']:
+			log('info', 'battle_result', 'get ship %s'%jo['api_data']['api_get_ship']['api_ship_name'])
 		return True
 	return False
 
 
 def slotitem():
-	api = '/kcsapi/api_get_member/slotitem'
+	api = '/kcsapi/api_get_member/slot_item'
 	data = {}
 	jo = callAPI(api,data)
 	if jo is not None:
 		log('info','slotitem','ok')
+		return True
+	return False
+
+
+def unsetslot():
+	api = '/kcsapi/api_get_member/unsetslot'
+	data = {}
+	jo = callAPI(api,data)
+	if jo is not None:
+		log('info','unsetslot','ok')
 		return True
 	return False
 
@@ -479,7 +478,7 @@ def yasen():
 #############################
 # user actions
 #############################
-
+ 
 def print_fleet_state(deck_id):
 	flag = True
 	for s in all_ships:
@@ -491,59 +490,56 @@ def print_fleet_state(deck_id):
 
 
 def go_to_home() :
-	login_check()
-	material()
-	deck_port()
-	ndock()
-	ship3()
-	basic()
+	port()
 
 
-# checked: modified
+def battle_home():
+	slotitem()
+	unsetslot()
+	useitem()
+	port()
+
+
 def fetch_mission_result(deck_id):
 	result(deck_id)
-	port() # deck_port()
-	# basic() 
-	# ship2()
-	# material()
+	port()
 	useitem()
 
 
-# checked: useless
+# checked: useless, change to dummy
 def go_to_repair():
 	ndock()
-	ship2()
-	useitem()
+	
 
 # highspeed: 0 for no, 1 for yes
-# checked: modified
 def repair(ship_id,ndock_id,highspeed):
 	nyukyo(ship_id,ndock_id,highspeed)
 	
-
 def go_to_change():
 	pass
-	# nothing needed
+
 
 def change_ship(ship_id,ship_idx):
 	change(ship_id,ship_idx)
 	deck()
 
+
 def go_to_charge():
 	pass
-	# nothing needed
 
 
-# checked
 def charge_fleet(deck_id):
 	charge(deck_id)
+
 
 def go_to_mission_page(mission):
 	mission_page()
 
+
 def start_mission(deck_id,mission_id):
 	api_start_mission(deck_id,mission_id)
 	deck()
+
 
 def write_battle_cnt():
 	global battle_cnt
@@ -608,10 +604,7 @@ def check_battle_condition():
 		cond_wait = (33-min_cond)*60
 	else:
 		cond_wait = 0
-	# for s in all_ships:
-	# 	if s.id in main_fleet and s.id in repair_dock.values():
-	# 		cond_wait = 600 
-
+	
 	ss_wait = 600
 	# check ss state
 	ss = [ele for ele in all_fleets[1] if ele in all_ss][0]
@@ -632,6 +625,7 @@ def check_battle_condition():
 						if not repair_dock.__contains__(i+1) or repair_dock[i+1]==0:
 							go_to_repair()
 							repair(s.id,i+1,0)
+							go_to_home()
 							break
 			elif s.id not in repair_dock.values() and not ok_flag: # s is available
 				change_ship(s.id,ss_loc)
@@ -650,7 +644,6 @@ def check_battle_condition():
 		return False
 
 
-# checking
 def go_to_battle_23():
 	battle_point = [1,3,5,9,10,11]
 	end_point = [8,9,10,11]
@@ -661,14 +654,12 @@ def go_to_battle_23():
 	time.sleep(5)
 	go_to_home()
 	mapinfo()
-	# sortie_conditions()
 	time.sleep(3)
 	mapcell(3,2)
 	point_now = map_start(3,2)
 
 	while True:
 		if point_now in battle_point:
-			#battle and check condition
 			battle()
 			time.sleep(15)
 			if point_now in [3,9,10,11] and midnight_flag==1:
@@ -677,8 +668,6 @@ def go_to_battle_23():
 			battle_result()
 			time.sleep(10)
 			ship2()
-			slotitem()
-			deck()
 			if not print_fleet_state(1):
 				break
 		if point_now in end_point:
@@ -689,7 +678,7 @@ def go_to_battle_23():
 		time.sleep(3)
 
 	time.sleep(3)
-	go_to_home()
+	battle_home()
 
 def plan_23():
 	# point 6 <=> point 12
@@ -721,7 +710,6 @@ def go_to_battle_11():
 	charge_fleet(1)
 	time.sleep(5)
 	go_to_home()
-	record()
 	mapinfo()
 	time.sleep(3)
 	mapcell(1,1)
@@ -733,9 +721,9 @@ def go_to_battle_11():
 		time.sleep(10)
 	battle_result()
 	time.sleep(10)
+	
+	# choose to fight another battle
 	ship2()
-	slotitem()
-	deck()
 	map_next()
 	time.sleep(10)
 	battle()
@@ -745,10 +733,8 @@ def go_to_battle_11():
 		time.sleep(10)
 	battle_result()
 	time.sleep(10)
-	ship2()
-	slotitem()
-	deck()
-	go_to_home()
+	battle_home()
+
 
 # map_next print '0 2' means not boss ponit
 def plan_a():
@@ -757,7 +743,7 @@ def plan_a():
 	time.sleep(5)
 	while True:
 		go_to_battle_11()
-		print 'tring to repair'
+		print 'trying to repair'
 		auto_repair_23()
 		go_to_home()
 		auto_mission()
@@ -768,11 +754,108 @@ def plan_a():
 		print("sleeping 15s")
 		time.sleep(15)
 
+
+def go_to_battle_e1():
+	go_to_charge()
+	charge_fleet(1)
+
+	mapinfo()
+	sortie_conditions()
+	mapcell(mapinfo_no=1, maparea_id=26)
+	map_start(mapinfo_no=1, maparea_id=26)
+	
+	# point A
+	battle()
+	time.sleep(15)
+	# no yasen
+	battle_result()
+	time.sleep(5)
+	ship2() # may be dangerouse!
+	# check state
+	if not print_fleet_state(1):
+		battle_home()
+		time.sleep(5)
+		return
+
+	map_next()
+	print 'assert api_next:1 api_no:2'
+	time.sleep(3)
+	# point B
+	battle()
+	time.sleep(15)
+	# no yasen
+	battle_result()
+	time.sleep(5)
+	ship2() # may be dangerouse!
+	# check state
+	if not print_fleet_state(1):
+		battle_home()
+		time.sleep(5)
+		return
+
+	map_next()
+	print 'assert api_next:2 api_no:3'
+	time.sleep(3)
+	# point D
+	battle()
+	time.sleep(15)
+	if midnight_flag==1:
+		yasen()
+		time.sleep(10)
+	battle_result()
+	time.sleep(5)
+	ship2() # may be dangerouse!
+	# check state
+	if not print_fleet_state(1):
+		battle_home()
+		time.sleep(5)
+		return
+
+	map_next() 
+	print 'assert api_next:0 api_no:10'
+	time.sleep(3)
+	# point H
+	battle()
+	time.sleep(15)
+	if midnight_flag==1:
+		yasen()
+		time.sleep(10)
+	battle_result()
+	time.sleep(5)
+
+	battle_home()
+
+
+def plan_hatsukaze():
+	global ship_cnt
+	go_to_home()
+	while not print_fleet_state(1):
+		print 'restore cond for 360s'
+		time.sleep(360)
+		go_to_home()
+	time.sleep(5)
+	while True:
+		log('info','main','ship cnt %d'%(ship_cnt))
+		if ship_cnt > 94:
+			return
+		go_to_battle_e1()
+		time.sleep(5)
+		print 'trying to repair'
+		auto_repair_23()
+		go_to_home()
+		auto_mission()
+		while not print_fleet_state(1):
+			print 'restore cond for 360s'
+			time.sleep(360)
+			go_to_home()
+		print('sleeping 15s')
+		time.sleep(15)
+
+
 def plan_tokyo():
 	go_to_charge()
 	charge_fleet(1)
 
-	record()
 	mapinfo()
 	mapcell(4,5)
 	map_start(4,5)
@@ -783,11 +866,10 @@ def plan_tokyo():
 	# no yasen
 	battle_result()
 	ship2()
-	slotitem()
-	deck()
+	
 	# check state
 	if not print_fleet_state(1):
-		go_to_home()
+		battle_home()
 		time.sleep(5)
 		return
 
@@ -803,11 +885,9 @@ def plan_tokyo():
 	# no yasen
 	battle_result()
 	ship2()
-	slotitem()
-	deck()
 	# check state
 	if not print_fleet_state(1):
-		go_to_home()
+		battle_home()
 		time.sleep(5)
 		return
 
@@ -825,10 +905,8 @@ def plan_tokyo():
 		time.sleep(10)
 	battle_result()
 	ship2()
-	slotitem()
-	deck()
-
-	go_to_home()
+	
+	battle_home()
 	time.sleep(1)
 
 def go_to_battle():
@@ -836,8 +914,8 @@ def go_to_battle():
 	go_to_charge()
 	charge_fleet(1)
 	# start battle
-	record()
 	mapinfo()
+	sortie_conditions()
 	mapcell()
 	map_start()
 	# map_next()
@@ -848,11 +926,8 @@ def go_to_battle():
 		time.sleep(10)
 	# battle step
 	battle_result()
-	ship2()
-	slotitem()
-	deck()
 	# battle end
-	go_to_home()
+	battle_home()
 
 #############################
 # control logic
@@ -882,6 +957,7 @@ def auto_mission():
 		if on_mission[fleet_id] is not -1:
 			sleep_time = min(sleep_time,on_mission[fleet_id]+5-time.time())
 
+
 def auto_battle():
 	while check_battle_condition():
 		go_to_battle()
@@ -889,11 +965,13 @@ def auto_battle():
 		global battle_cnt
 		battle_cnt += 1
 
+
 def r_helper(x):
 	if x in all_fleets[1]:
 		return 1
 	else:
 		return float(x.life)/x.max_life
+
 
 def auto_repair_23():
 	repair_list = [ele for ele in all_ships if ele.id in all_fleets[1]  and ele.life*2<ele.max_life and ele.id not in repair_dock.values()]
@@ -903,13 +981,15 @@ def auto_repair_23():
 			if repair_dock[i+1]==0:
 				go_to_repair()				
 				repair(s.id,i+1,1)
+				go_to_home()
 				break
 		time.sleep(3)
 	return True
 
+
 def auto_repair():
 	repair_list = [ele for ele in all_ships if ele.life<ele.max_life and ele.id not in repair_dock.values()]
-	repair_list = [ele for ele in repair_list if (ele.id in all_fleets[1] and (ele.life*2<ele.max_life or ele.id in all_ss or (ele.life*2<ele.max_life and ele.id in protection_id))) or ele.id not in all_fleets[1]]
+	repair_list = [ele for ele in repair_list if (ele.id in all_fleets[1] and (ele.life*2<=ele.max_life or ele.id in all_ss or (ele.life*2<ele.max_life and ele.id in protection_id))) or ele.id not in all_fleets[1]]
 	repair_list.sort(key=lambda x:r_helper(x),reverse=True) # ships in fleet 1 has greater priority
 	for s in repair_list:
 		# find an empty dock
@@ -920,9 +1000,11 @@ def auto_repair():
 					repair(s.id,i+1,1)
 				else:
 					repair(s.id,i+1,0)
+				go_to_home()
 				break
 		time.sleep(3)
 	return True
+
 
 def main():
 	go_to_home()
@@ -954,5 +1036,4 @@ def main():
 	print_resource()
 
 if __name__ == '__main__':
-	# main()
-	pass
+	main()
