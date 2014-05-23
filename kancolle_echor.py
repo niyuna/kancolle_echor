@@ -1062,5 +1062,5 @@ def main():
     print_resource()
 
 if __name__ == '__main__':
-    # main()
-    pass
+    main()
+    # pass
