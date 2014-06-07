@@ -9,11 +9,11 @@ import math
 
 ########################
 # user define config
-mission = {2:2, 3:5, 4:37} # {2:6, 3:5, 4:38}
-api_token = '49eedb78a2ec7df25921ec67fc9beb31b12c09a9'
+mission = {2:6, 3:5, 4:38}
+api_token = ''
 api_verno = 1
 host = '125.6.189.135'
-member_id = '13063716'
+member_id = ''
 log_file = r'log'
 api_token_file = r'api_token'
 sleep_time_file = r'sleep_time'
@@ -24,7 +24,7 @@ enable_auto_battle = False
 enable_auto_repair = True
 go_to_tokyo = False
 enable_proxy = False # when network sucks, use a local proxy to avoid catgod
-ss_id = [695, 93, 365, 704, 385, 1917]
+ss_id = [4234, 3138, 1917, 695, 93, 365, 704, 385]
 ss_loc = 1 # 0~5
 # these ships will be repaired when they are less than 50% max HP
 protection_id = [744, 31, 118, 648, 913]
@@ -279,29 +279,11 @@ def cS():
     return 1000 + int(math.floor(random() * 8999));
 
 
-# get api_port using a so-called `_$` method in core_ldtixityfwi
 def generate_api_port_dollar():
-    SF = [1802, 9814, 5616, 4168, 7492, 5188, 2765, 8118, 6381, 7636]
-    u = int(member_id)
-    ret = cM((cR() * 1000) + (u % 1000))
-    ret += cM((9999999999 - int(math.floor(tI() / 1000)) - u) * cG(SF[u%10]))
-    ret += cM(cS())
-    log('info', 'port', ret)
-    return ret
-
-
-# the old method to get api_port, `_`
-def generate_api_port():
-    # _local3 = ["16o", "1sc", "2j6", "371", "50e", "5dp", "6hi", "89a", "8dc", "9nf", "118"] # core_2_0_1
-    _local3 = ["315", "50e", "7ig", "209", "63e", "9c6", "6cj", "3ge", "928", "1h9", "118"]; # core_2_0_9
-    u = int(member_id)
-    ret = ''
-    ret += str(gI(_local3[10]) + (u % gI(_local3[10])))
-    ret += str((9999999999 - int(math.floor(tI() / gI(_local3[10]))) - u) * gI(_local3[(u % 10)]))
-    ret += cN() * 4
-    log('info', 'port', ret)
-    return ret
-
+    import port
+    api_port = port.generate(member_id)
+    log('info', 'api_port', api_port)
+    return api_port
 
 # new method for api_port
 def port():
@@ -939,10 +921,12 @@ def go_to_battle():
     # charge fleet 1
     go_to_charge()
     charge_fleet(1)
+    go_to_home()
+    time.sleep(2)
     # start battle
     mapinfo()
-    sortie_conditions()
     mapcell()
+    time.sleep(2)
     map_start()
     # map_next()
     battle()
@@ -952,6 +936,7 @@ def go_to_battle():
         time.sleep(10)
     # battle step
     battle_result()
+    time.sleep(2)
     # battle end
     battle_home()
 
