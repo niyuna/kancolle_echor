@@ -60,7 +60,7 @@ Il = [1623,5727,9278,3527,4976,7180734,6632,3708,4796,9675,13,6631,2987,10,1901,
 
 def I1(II, lI):
     ll = 0
-    while not (II == lI.l(str(lI.y(Il[Il[13]])), ll, 1)):
+    while not (II == lI.l(repr(lI.y(Il[Il[13]])), ll, 1)):
         ll += 1
     return ll
 
