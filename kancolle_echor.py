@@ -249,36 +249,6 @@ def result(deck_id):
         return False
 
 
-# api_port_helper
-def gI(s):
-    return int(s, 31)
-
-
-# api_port_helper
-def cN():
-    return str(int(math.floor(random() * 10)))
-
-
-def tI():
-    return int(time.time() * 1000)
-
-
-def cR():
-    return 1 + int(math.floor(random() * 9))
-
-
-def cM(n):
-    return str(n)
-
-
-def cG(o):
-    return int(o)
-
-
-def cS():
-    return 1000 + int(math.floor(random() * 8999));
-
-
 def generate_api_port_dollar():
     import port
     api_port = port.generate(member_id)
